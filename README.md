@@ -1,20 +1,22 @@
-# Parallelizzazione calcolo Pagerank
+This is a brief report that describes how I parallelized the Pagerank calculation.
 
-## Inizializzazione
-Inizialmente si ha la fase di inizializzazione del vettore x, durante la quale **ad ogni thread viene assegnato un blocco di indici** dove inseriranno il valore iniziale (valorePasso0)
+# Pagerank Calculation Parallelization
 
-## Iterazione
-Le iterazioni sono composte da 2 fasi:
+## Initialization
+Initially, the vector x undergoes an initialization phase, during which **each thread is assigned a block of indices** where they will insert the initial value (valorePasso0).
 
-### Thread Ausiliari
+## Iteration
+The iterations consist of 2 phases:
 
-- **Fase 1**: Utilizzando la precedente divisione in blocchi del vettore x, ogni thread ne calcola la rispettiva sommatoria del contributo dei nodi dead-end e definisce gli elementi del vettore y. Alla fine della scansione, ogni thread, mediante un mutex, somma la propria parte di sommatoria (temporanea) in quella principale. Una volta fatto, segnalano di aver terminato la prima parte tramite una variabile di condizione, e si mettono in attesa su una seconda. *Si noti che il segnale viene inviato solo una volta che tutti i thread hanno terminato, semplicemente utilizzando un contatore*.
+### Auxiliary Threads
 
-- **Fase 2**: Una volta che gli ausiliari sono tutti in attesa, il main thread manda un segnale broadcast, iniziando la seconda parte. Qui viene calcolato il vettore xnext e la sommatoria dell'errore nel seguente modo. Viene utilizzato un indice condiviso tra gli ausiliari, che rappresenta l'elemento del vettore xnext da calcolare, protetto naturalmente da un mutex (si usa lo stesso della fase precedente). Quindi, ogni thread, ne leggerá l'indice prima di incrementarlo di 1. Ottenuto l'indice viene liberato il mutex, per permettere agli altri ausiliari di continuare, e inizia il calcolo dell'elemento, quale, una volta terminato, viene utilizzato per la sommatoria dell'errore, facendo la differenza con l'elemento alla stessa posizione del vettore x.
- La fase termina quando l'indice é uguale al numero dei nodi, l'ultimo elemento calcolato sará stato quindi quello in posizione numeroNodi - 1. Tramite mutex ogni ausiliare aggiunge la sua parte di sommatoria dell'errore a quella principale, per poi utilizzare il metodo descritto precedentemente per segnalare il main thread e mettersi in attesa.
+- **Phase 1**: Using the previous division into blocks of vector x, each thread calculates its respective sum of the contributions from dead-end nodes and defines the elements of vector y. At the end of the scan, each thread, using a mutex, adds its part of the (temporary) sum to the main sum. Once done, they signal that they have completed the first part via a condition variable and wait on a second one. *Note that the signal is sent only once all threads have finished, simply using a counter*.
 
- ### Main thread
+- **Phase 2**: Once all the auxiliary threads are waiting, the main thread sends a broadcast signal, starting the second part. Here, vector xnext and the sum of the error are calculated as follows. A shared index among the auxiliary threads is used, representing the element of vector xnext to be calculated, protected by a mutex (the same one used in the previous phase). Each thread reads the index before incrementing it by 1. Once the index is obtained, the mutex is released to allow other auxiliaries to proceed, and the calculation of the element begins. Once completed, the element is used to sum the error by taking the difference with the element at the same position in vector x.
+The phase ends when the index equals the number of nodes, meaning the last calculated element will be the one at position numberOfNodes - 1. Using a mutex, each auxiliary adds its part of the error sum to the main one, then uses the previously described method to signal the main thread and wait.
 
- - **Fase 1**: Nella prima fase, il main thread si mette in attesa che gli ausiliari terminino. Quando viene segnalato, imposta a 0 il contatore 'tf1' che rappresenta i thread che hanno segnalato (per l'iterazione successiva), calcola il valore del dead-end grazie alla sommatoria completa e imposta a 0 l'errore, che sta per essere calcolato. Invia il segnale di broadcast per iniziare la fase 2 e si mette in attesa che termini.
+### Main Thread
 
- - **Fase 2**: Una volta segnalato, imposta a 0 'tf2', l'indice per il calcolo degli elementi xnext e la sommatoria del dead-end. Scambia poi i puntatori di x e xnext per l'iterazione successiva e controlla se l'algoritmo deve terminare. In caso positivo, imposta la variabile condivisa 'stop' a true (quale fará terminare gli ausiliari all'inizio della prossima iterazione) e quindi invia il segnale broadcast. Altrimenti invia solo il segnale, e comincia l'iterazione successiva.
+- **Phase 1**: In the first phase, the main thread waits for the auxiliaries to finish. When signaled, it sets the counter 'tf1' representing the threads that have signaled (for the next iteration) to 0, calculates the dead-end value using the complete sum, and sets the error to 0, which is about to be calculated. It sends the broadcast signal to start phase 2 and waits for it to finish.
+
+- **Phase 2**: Once signaled, it sets 'tf2', the index for calculating the xnext elements, and the dead-end sum to 0. Then it swaps the pointers of x and xnext for the next iteration and checks if the algorithm should terminate. If so, it sets the shared variable 'stop' to true (which will stop the auxiliaries at the beginning of the next iteration) and then sends the broadcast signal. Otherwise, it simply sends the signal and begins the next iteration.
